@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Geoportal Hidrografía Ecuador</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#0f1b33;
+      --card2:#122041;
+      --text:#e9eefc;
+      --muted:rgba(233,238,252,.72);
+      --border:rgba(255,255,255,.08);
+      --shadow:0 14px 40px rgba(0,0,0,.35);
+      --radius:16px;
+
+      --prov:#b8c0d4;
+      --rioD:#2b74ff;
+      --rioT:#00c2ff;
+      --lagos:#48b3ff;
+      --rep:#ff4b5c;
+    }
+
+    *{box-sizing:border-box}
+    body{ margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#000; }
+    #map{ height:100vh; width:100vw; }
+
+    .panel{
+      position:absolute; top:14px; left:14px; z-index:9999;
+      width:380px; max-width:calc(100vw - 28px);
+      color:var(--text);
+      background:linear-gradient(180deg, rgba(15,27,51,.98), rgba(10,18,34,.96));
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      backdrop-filter: blur(10px);
+    }
+    .panel-header{
+      padding:14px 14px 10px 14px;
+      display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0));
+      border-bottom:1px solid var(--border);
+    }
+    .title{
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .title h1{ font-size:14px; margin:0; letter-spacing:.2px; }
+    .title .sub{ font-size:12px; color:var(--muted); line-height:1.25; }
+    .badges{ display:flex; gap:8px; align-items:center; }
+    .pill{
+      font-size:12px; padding:4px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      border:1px solid var(--border);
+      color:var(--text);
+      white-space:nowrap;
+    }
+    .pill.ok{ background:rgba(46,204,113,.12); border-color:rgba(46,204,113,.25); }
+    .pill.warn{ background:rgba(241,196,15,.14); border-color:rgba(241,196,15,.28); }
+    .pill.err{ background:rgba(231,76,60,.14); border-color:rgba(231,76,60,.28); }
+
+    .panel-body{ padding:12px 14px 14px 14px; display:flex; flex-direction:column; gap:12px; }
+
+    .section{
+      background:rgba(255,255,255,.05);
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:12px;
+    }
+    .section-title{
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:10px;
+    }
+    .section-title b{ font-size:12px; letter-spacing:.2px; }
+    .hint{ font-size:12px; color:var(--muted); }
+
+    .row{ display:flex; gap:10px; align-items:center; }
+    .row + .row{ margin-top:8px; }
+
+    .chk{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      padding:10px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.18);
+    }
+    .chk label{
+      display:flex; align-items:center; gap:10px;
+      font-size:13px;
+    }
+    .swatch{
+      width:14px; height:14px; border-radius:4px;
+      border:1px solid rgba(255,255,255,.25);
+      display:inline-block;
+    }
+    .sw-prov{ background:var(--prov); }
+    .sw-rd{ background:var(--rioD); }
+    .sw-rt{ background:var(--rioT); }
+    .sw-lk{ background:var(--lagos); }
+    .sw-rep{ background:var(--rep); }
+
+    input[type="checkbox"]{ transform: scale(1.1); }
+
+    .search-wrap{
+      position:relative;
+      display:flex; gap:10px;
+    }
+    .search{
+      flex:1;
+      background:rgba(0,0,0,.22);
+      border:1px solid var(--border);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      outline:none;
+      font-size:13px;
+    }
+    .search::placeholder{ color:rgba(233,238,252,.55); }
+    .btn{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:13px;
+      user-select:none;
+    }
+    .btn.primary{
+      background:rgba(43,116,255,.18);
+      border-color:rgba(43,116,255,.35);
+    }
+    .btn.danger{
+      background:rgba(255,75,92,.16);
+      border-color:rgba(255,75,92,.30);
+    }
+    .btn:active{ transform: translateY(1px); }
+
+    .suggest{
+      position:absolute;
+      top:44px; left:0; right:0;
+      background:rgba(15,27,51,.98);
+      border:1px solid var(--border);
+      border-radius:14px;
+      max-height:220px;
+      overflow:auto;
+      display:none;
+      z-index:10000;
+    }
+    .suggest .item{
+      padding:10px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      cursor:pointer;
+      font-size:13px;
+      display:flex; justify-content:space-between; gap:10px;
+    }
+    .suggest .item:hover{ background:rgba(255,255,255,.06); }
+    .tag{
+      font-size:12px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      color:var(--muted);
+      white-space:nowrap;
+    }
+
+    .log{
+      margin-top:8px;
+      font-size:12px;
+      max-height:110px;
+      overflow:auto;
+      background:rgba(0,0,0,.22);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px;
+      white-space:pre-wrap;
+      color:rgba(233,238,252,.75);
+    }
+
+    /* Leaflet legend control */
+    .leaflet-control.custom-legend{
+      background:rgba(15,27,51,.94);
+      border:1px solid rgba(255,255,255,.10);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:14px;
+      box-shadow:0 10px 28px rgba(0,0,0,.35);
+      font-size:12px;
+      line-height:1.25;
+    }
+    .legend-row{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .legend-line{
+      width:18px; height:0; border-top:3px solid var(--rioD);
+      border-radius:4px;
+    }
+    .legend-line.dashed{ border-top-style:dashed; border-top-color:var(--rioT); }
+    .legend-poly{ width:16px; height:12px; border-radius:4px; background:rgba(72,179,255,.35); border:1px solid rgba(72,179,255,.8); }
+    .legend-point{ width:10px; height:10px; border-radius:50%; background:var(--rep); border:1px solid rgba(255,255,255,.35); }
+
+    @media (max-width: 520px){
+      .panel{ width: calc(100vw - 28px); }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="title">
+        <h1>Geoportal • Cuerpos Hidrográficos del Ecuador</h1>
+        <div class="sub">Búsqueda, filtros, leyenda, hover y GPS para encontrar el cuerpo hídrico más cercano.</div>
+      </div>
+      <div class="badges">
+        <span class="pill ok" id="status">Listo</span>
+        <span class="pill" id="count">0</span>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div class="section">
+        <div class="section-title">
+          <b>Buscar</b>
+          <span class="hint">Zoom al resultado</span>
+        </div>
+
+        <div class="search-wrap">
+          <input class="search" id="search" placeholder="Ej: Río Esmeraldas, Laguna, Represa..." autocomplete="off" />
+          <button class="btn primary" id="btnSearch">Buscar</button>
+          <div class="suggest" id="suggest"></div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button class="btn" id="btnReload" title="Recargar capas según vista">↻ Recargar</button>
+          <button class="btn danger" id="btnGPS" title="Usar tu ubicación y encontrar el cuerpo hídrico más cercano">💧 Cuerpo hídrico más cercano</button>
+        </div>
+
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <b>Capas</b>
+          <span class="hint">Activa / desactiva</span>
+        </div>
+
+        <div class="chk">
+          <label for="chkProv"><span class="swatch sw-prov"></span> Provincias</label>
+          <input id="chkProv" type="checkbox" checked />
+        </div>
+
+        <div class="chk">
+          <label for="chkRioD"><span class="swatch sw-rd"></span> Río doble</label>
+          <input id="chkRioD" type="checkbox" checked />
+        </div>
+
+        <div class="chk">
+          <label for="chkRioT"><span class="swatch sw-rt"></span> Río torrente</label>
+          <input id="chkRioT" type="checkbox" checked />
+        </div>
+
+        <div class="chk">
+          <label for="chkLagos"><span class="swatch sw-lk"></span> Lagos / Lagunas</label>
+          <input id="chkLagos" type="checkbox" checked />
+        </div>
+
+        <div class="chk">
+          <label for="chkRep"><span class="swatch sw-rep"></span> Represas</label>
+          <input id="chkRep" type="checkbox" checked />
+        </div>
+
+        <div class="hint" style="margin-top:10px;">
+          Hover muestra <b>nombre</b> y <b>área (ha)</b> o <b>longitud (km)</b>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Turf.js para calcular distancias / nearest -->
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <script>
+    // =========================
+    // CONFIG SUPABASE
+    // =========================
+    const SUPABASE_URL = "https://vjzkzgeghcfmtbenkusj.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqemt6Z2VnaGNmbXRiZW5rdXNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODQ5MzIsImV4cCI6MjA4NzA2MDkzMn0.t4YY5mWB9R85J1ziYqeAGq2M2mSUhzcA8i4xsaq658Q";
+    const RPC_NAME = "fc_by_bbox_flex";
+    const GEOM_COL = "geom"; // cambia si tu geometría se llama distinto
+
+    const TABLES = {
+      provincias: "provincias",
+      rio_doble: "rio_doble",
+      rio_torrente: "rio_torrente",
+      lago_laguna: "lago_laguna",
+      represas: "represas"
+    };
+
+    // Límites altos (si se pone lento, bájalos o hacemos carga por zoom)
+    const LIMITS = {
+      provincias: 3000,
+      rio_doble: 50000,
+      rio_torrente: 50000,
+      lago_laguna: 30000,
+      represas: 30000
+    };
+
+    const NAME_COL_BY_TABLE = {
+      provincias: "nombre",
+      rio_doble: "nombre",
+      rio_torrente: "nombre",
+      lago_laguna: "nombre",
+      represas: "nombre"
+    };
+
+    // =========================
+    // DOM / UI
+    // =========================
+    const els = {
+      chkProv: document.getElementById("chkProv"),
+      chkRioD: document.getElementById("chkRioD"),
+      chkRioT: document.getElementById("chkRioT"),
+      chkLagos: document.getElementById("chkLagos"),
+      chkRep: document.getElementById("chkRep"),
+      btnReload: document.getElementById("btnReload"),
+      btnGPS: document.getElementById("btnGPS"),
+      status: document.getElementById("status"),
+      count: document.getElementById("count"),
+      log: document.getElementById("log"),
+      search: document.getElementById("search"),
+      btnSearch: document.getElementById("btnSearch"),
+      suggest: document.getElementById("suggest"),
+    };
+
+    function setStatus(text, mode="ok"){
+      els.status.textContent = text;
+      els.status.className = "pill " + (mode === "ok" ? "ok" : (mode === "warn" ? "warn" : "err"));
+    }
+    function setCount(n){ els.count.textContent = String(n); }
+
+    function logLine(msg){
+      const now = new Date().toLocaleTimeString();
+      els.log.textContent = `[${now}] ${msg}\n` + els.log.textContent;
+    }
+
+    const safe = v => (v === null || v === undefined || String(v).trim()==="") ? "s/n" : String(v).replace(/[<>]/g,"");
+    const fmtHa = v => (v === null || v === undefined || v === "") ? null :
+      `${Number(v).toLocaleString("es-EC",{maximumFractionDigits:2})} ha`;
+    const fmtKm = v => (v === null || v === undefined || v === "") ? null :
+      `${Number(v).toLocaleString("es-EC",{maximumFractionDigits:2})} km`;
+
+    function tooltipHTML(p){
+  const nombre = safe(p?.nombre);
+
+  const areaKm2 = (p?.area_km2 !== null && p?.area_km2 !== undefined && p?.area_km2 !== "")
+    ? Number(p.area_km2).toLocaleString("es-EC",{maximumFractionDigits:2}) + " km²"
+    : null;
+
+  const areaHa = fmtHa(p?.area_ha);
+  const len  = fmtKm(p?.length_km);
+
+  let extra = "";
+  if (areaKm2) extra = `<div><b>Superficie:</b> ${areaKm2}</div>`;
+  else if (areaHa) extra = `<div><b>Área:</b> ${areaHa}</div>`;
+  else if (len) extra = `<div><b>Longitud:</b> ${len}</div>`;
+
+  return `<div style="font-size:12px;line-height:1.25"><div><b>${nombre}</b></div>${extra}</div>`;
+}
+
+    // =========================
+    // MAPA
+    // =========================
+    const map = L.map("map", { preferCanvas:true }).setView([-1.6,-78.4], 7);
+
+    // Basemap oscuro “tipo GIS”
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap & CARTO"
+    }).addTo(map);
+
+    function bbox(){
+      const b = map.getBounds();
+      return { minx:b.getWest(), miny:b.getSouth(), maxx:b.getEast(), maxy:b.getNorth() };
+    }
+
+    // =========================
+    // Legend (Leaflet control)
+    // =========================
+    const Legend = L.Control.extend({
+      options: { position: "bottomright" },
+      onAdd: function(){
+        const div = L.DomUtil.create("div", "leaflet-control custom-legend");
+        div.innerHTML = `
+          <div style="font-weight:800; margin-bottom:6px;">Leyenda</div>
+          <div class="legend-row"><span class="swatch sw-prov"></span> Provincias</div>
+          <div class="legend-row"><span class="legend-line"></span> Río doble</div>
+          <div class="legend-row"><span class="legend-line dashed"></span> Río torrente</div>
+          <div class="legend-row"><span class="legend-poly"></span> Lago / Laguna</div>
+          <div class="legend-row"><span class="legend-point"></span> Represa</div>
+          <div style="margin-top:8px; color:rgba(233,238,252,.75)">
+            Hover: nombre + área/longitud
+          </div>
+        `;
+        return div;
+      }
+    });
+    map.addControl(new Legend());
+
+    // =========================
+    // Capas Leaflet
+    // =========================
+    function bindHover(feature, layer){
+      layer.on("mouseover", ()=>{
+        layer.bindTooltip(tooltipHTML(feature.properties||{}), { sticky:true, direction:"top", opacity:0.95 }).openTooltip();
+        if (layer.bringToFront) layer.bringToFront();
+      });
+      layer.on("mouseout", ()=> layer.closeTooltip());
+    }
+
+    const layerProv = L.geoJSON(null, {
+      style: { color:getCSS("--prov"), weight:1, fillOpacity:0.05 },
+      onEachFeature: (f,l)=> {
+        bindHover(f,l);
+        l.bindPopup(`<b>Provincia:</b> ${safe(f.properties?.nombre)}`);
+      }
+    }).addTo(map);
+
+    const layerRioD = L.geoJSON(null, {
+      style: { color:getCSS("--rioD"), weight:2.5, opacity:0.95 },
+      onEachFeature: (f,l)=> {
+        bindHover(f,l);
+        l.bindPopup(`<b>Río doble:</b> ${safe(f.properties?.nombre)}<br><b>Longitud:</b> ${fmtKm(f.properties?.length_km)||"s/n"}`);
+      }
+    }).addTo(map);
+
+    const layerRioT = L.geoJSON(null, {
+      style: { color:getCSS("--rioT"), weight:2.5, dashArray:"7,7", opacity:0.95 },
+      onEachFeature: (f,l)=> {
+        bindHover(f,l);
+        l.bindPopup(`<b>Río torrente:</b> ${safe(f.properties?.nombre)}<br><b>Longitud:</b> ${fmtKm(f.properties?.length_km)||"s/n"}`);
+      }
+    }).addTo(map);
+
+    const layerLagos = L.geoJSON(null, {
+      style: { color:getCSS("--lagos"), weight:1.5, fillOpacity:0.30, opacity:0.95 },
+      onEachFeature: (f,l)=> {
+        bindHover(f,l);
+        l.bindPopup(`<b>Lago/Laguna:</b> ${safe(f.properties?.nombre)}<br><b>Área:</b> ${fmtHa(f.properties?.area_ha)||"s/n"}`);
+      }
+    }).addTo(map);
+
+    const layerRep = L.geoJSON(null, {
+      pointToLayer: (f,latlng)=> L.circleMarker(latlng, { radius:6, color:getCSS("--rep"), weight:2, fillOpacity:0.65 }),
+      style: { color:getCSS("--rep"), weight:1.5, fillOpacity:0.22, opacity:0.95 },
+      onEachFeature: (f,l)=> {
+        bindHover(f,l);
+        const area = fmtHa(f.properties?.area_ha);
+        l.bindPopup(`<b>Represa:</b> ${safe(f.properties?.nombre)}${area ? `<br><b>Área:</b> ${area}` : ""}`);
+      }
+    }).addTo(map);
+
+    // GPS marker
+    let gpsMarker = null;
+    let gpsCircle = null;
+    let nearestMarker = null;
+
+    function getCSS(varName){
+      return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    }
+
+    function enableLayer(layer, enabled){
+      if (enabled){
+        if (!map.hasLayer(layer)) map.addLayer(layer);
+      } else {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+        layer.clearLayers();
+      }
+    }
+
+    // =========================
+    // DATA INDEX para búsqueda y nearest
+    // =========================
+    // Cada item: { key, name, kind, layerRef, featureGeoJSON }
+    let searchIndex = [];
+
+    function resetIndexForKind(kind){
+      searchIndex = searchIndex.filter(x => x.kind !== kind);
+    }
+
+    function addToIndexFromLayer(kind, leafletLayer){
+      leafletLayer.eachLayer(l=>{
+        const f = l.feature;
+        const name = safe(f?.properties?.nombre);
+        if (!f || !name || name === "s/n") return;
+        searchIndex.push({
+          key: `${kind}:${name}:${L.stamp(l)}`,
+          name,
+          kind,
+          layerRef: l,
+          feature: f
+        });
+      });
+    }
+
+    function kindLabel(kind){
+      switch(kind){
+        case "rio_doble": return "Río doble";
+        case "rio_torrente": return "Río torrente";
+        case "lago_laguna": return "Lago/Laguna";
+        case "represas": return "Represa";
+        case "provincias": return "Provincia";
+        default: return kind;
+      }
+    }
+
+    // =========================
+    // RPC
+    // =========================
+    async function callRPC(tableName, limit){
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${RPC_NAME}`,{
+        method:"POST",
+        headers:{
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type":"application/json"
+        },
+        body: JSON.stringify({
+          p_table: tableName,
+          ...bbox(),
+          p_geom_col: GEOM_COL,
+          p_name_col: NAME_COL_BY_TABLE[tableName] || "nombre",
+          p_limit: limit
+        })
+      });
+
+      if (!res.ok){
+        const txt = await res.text().catch(()=> "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // =========================
+    // REFRESH robusto (por capa)
+    // =========================
+    let refreshTimer = null;
+    function debounceRefresh(ms=350){
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refresh, ms);
+    }
+
+    async function loadLayer(kind, layer, limit){
+      const tableName = TABLES[kind];
+      logLine(`Cargando ${kind}…`);
+      const fc = await callRPC(tableName, limit);
+      layer.clearLayers().addData(fc);
+      const n = fc.features?.length || 0;
+      logLine(`OK ${kind}: ${n} elementos`);
+      // reconstruir índice solo para esa capa
+      resetIndexForKind(kind);
+      addToIndexFromLayer(kind, layer);
+      return n;
+    }
+
+    async function refresh(){
+      setStatus("Cargando…","warn");
+      setCount(0);
+
+      enableLayer(layerProv, els.chkProv.checked);
+      enableLayer(layerRioD, els.chkRioD.checked);
+      enableLayer(layerRioT, els.chkRioT.checked);
+      enableLayer(layerLagos, els.chkLagos.checked);
+      enableLayer(layerRep,  els.chkRep.checked);
+
+      const jobs = [];
+      if (els.chkProv.checked) jobs.push(loadLayer("provincias", layerProv, LIMITS.provincias));
+      if (els.chkRioD.checked) jobs.push(loadLayer("rio_doble", layerRioD, LIMITS.rio_doble));
+      if (els.chkRioT.checked) jobs.push(loadLayer("rio_torrente", layerRioT, LIMITS.rio_torrente));
+      if (els.chkLagos.checked) jobs.push(loadLayer("lago_laguna", layerLagos, LIMITS.lago_laguna));
+      if (els.chkRep.checked) jobs.push(loadLayer("represas", layerRep, LIMITS.represas));
+
+      if (!jobs.length){
+        setStatus("Sin capas","warn");
+        return;
+      }
+
+      const results = await Promise.allSettled(jobs);
+      const total = results
+        .filter(r => r.status === "fulfilled")
+        .reduce((acc, r) => acc + (r.value || 0), 0);
+      setCount(total);
+
+      const failed = results.filter(r => r.status === "rejected");
+      if (failed.length){
+        setStatus("Parcial","warn");
+        failed.forEach(f => logLine(`ERROR: ${f.reason?.message || f.reason}`));
+      } else {
+        setStatus("Listo","ok");
+      }
+
+      // refrescar sugerencias si hay texto
+      if (els.search.value.trim()) buildSuggestions(els.search.value.trim());
+    }
+
+    // =========================
+    // BÚSQUEDA + autocomplete
+    // =========================
+    function buildSuggestions(q){
+      const query = q.toLowerCase();
+      const pool = searchIndex
+        .filter(x => x.name.toLowerCase().includes(query))
+        .slice(0, 12);
+
+      els.suggest.innerHTML = pool.map(item => `
+        <div class="item" data-key="${encodeURIComponent(item.key)}">
+          <span>${escapeHtml(item.name)}</span>
+          <span class="tag">${kindLabel(item.kind)}</span>
+        </div>
+      `).join("");
+
+      els.suggest.style.display = pool.length ? "block" : "none";
+    }
+
+    function hideSuggestions(){
+      els.suggest.style.display = "none";
+    }
+
+    function findIndexItemByKey(key){
+      return searchIndex.find(x => x.key === key);
+    }
+
+    function zoomToLayerRef(layerRef){
+      if (layerRef.getBounds){
+        map.fitBounds(layerRef.getBounds(), { padding:[30,30] });
+      } else if (layerRef.getLatLng){
+        map.setView(layerRef.getLatLng(), Math.max(map.getZoom(), 14));
+      }
+      if (layerRef.openPopup) layerRef.openPopup();
+    }
+
+    function doSearch(){
+      const q = els.search.value.trim();
+      if (!q) return;
+
+      // exact match first
+      const exact = searchIndex.find(x => x.name.toLowerCase() === q.toLowerCase());
+      const first = exact || searchIndex.find(x => x.name.toLowerCase().includes(q.toLowerCase()));
+      if (!first){
+        logLine(`Búsqueda: sin resultados para "${q}"`);
+        return;
+      }
+      zoomToLayerRef(first.layerRef);
+      logLine(`Búsqueda: ${first.name} (${kindLabel(first.kind)})`);
+      hideSuggestions();
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    els.search.addEventListener("input", (e)=>{
+      const v = e.target.value.trim();
+      if (!v) { hideSuggestions(); return; }
+      buildSuggestions(v);
+    });
+
+    els.search.addEventListener("keydown", (e)=>{
+      if (e.key === "Enter") doSearch();
+      if (e.key === "Escape") hideSuggestions();
+    });
+
+    els.btnSearch.addEventListener("click", doSearch);
+
+    els.suggest.addEventListener("click", (e)=>{
+      const itemEl = e.target.closest(".item");
+      if (!itemEl) return;
+      const key = decodeURIComponent(itemEl.getAttribute("data-key"));
+      const item = findIndexItemByKey(key);
+      if (!item) return;
+      els.search.value = item.name;
+      zoomToLayerRef(item.layerRef);
+      logLine(`Búsqueda: ${item.name} (${kindLabel(item.kind)})`);
+      hideSuggestions();
+    });
+
+    document.addEventListener("click", (e)=>{
+      const inside = e.target.closest(".search-wrap");
+      if (!inside) hideSuggestions();
+    });
+
+    // =========================
+    // GPS cercano (nearest)
+    // =========================
+    function featureDistanceKm(userPt, feature){
+      // userPt: turf point [lng,lat]
+      // feature: GeoJSON feature
+      const geom = feature.geometry;
+      if (!geom) return Infinity;
+
+      try{
+        if (geom.type === "Point"){
+          const p = turf.point(geom.coordinates);
+          return turf.distance(userPt, p, {units:"kilometers"});
+        }
+
+        if (geom.type === "LineString" || geom.type === "MultiLineString"){
+          // nearest point on line
+          const line = feature;
+          const snapped = turf.nearestPointOnLine(line, userPt, {units:"kilometers"});
+          return snapped?.properties?.dist ?? turf.distance(userPt, snapped, {units:"kilometers"});
+        }
+
+        if (geom.type === "Polygon" || geom.type === "MultiPolygon"){
+          // inside polygon => 0
+          if (turf.booleanPointInPolygon(userPt, feature)) return 0;
+          // distance to polygon boundary
+          const boundary = turf.polygonToLine(feature);
+          const d = turf.pointToLineDistance(userPt, boundary, {units:"kilometers"});
+          return d;
+        }
+      } catch(_) {}
+
+      // fallback: centroid distance
+      try{
+        const c = turf.centroid(feature);
+        return turf.distance(userPt, c, {units:"kilometers"});
+      } catch(_) {
+        return Infinity;
+      }
+    }
+
+    function nearestWaterBody(lng, lat){
+      const userPt = turf.point([lng, lat]);
+
+      // solo cuerpos hídricos (no provincias)
+      const candidates = searchIndex.filter(x =>
+        ["rio_doble","rio_torrente","lago_laguna","represas"].includes(x.kind)
+      );
+
+      if (!candidates.length) return null;
+
+      let best = null;
+      for (const c of candidates){
+        const d = featureDistanceKm(userPt, c.feature);
+        if (!Number.isFinite(d)) continue;
+        if (!best || d < best.distKm){
+          best = { ...c, distKm: d };
+        }
+      }
+      return best;
+    }
+
+    async function gpsNearest(){
+      if (!navigator.geolocation){
+        logLine("GPS: tu navegador no soporta geolocalización.");
+        return;
+      }
+
+      setStatus("GPS…","warn");
+      navigator.geolocation.getCurrentPosition((pos)=>{
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const acc = pos.coords.accuracy || 0;
+
+        // marker ubicación
+        if (gpsMarker) map.removeLayer(gpsMarker);
+        if (gpsCircle) map.removeLayer(gpsCircle);
+
+        gpsMarker = L.marker([lat,lng]).addTo(map).bindPopup(`<b>Tu ubicación</b><br>Precisión aprox: ${Math.round(acc)} m`);
+        gpsCircle = L.circle([lat,lng], { radius: acc, color:"#ffffff", weight:1, fillOpacity:0.08 }).addTo(map);
+        map.setView([lat,lng], Math.max(map.getZoom(), 13));
+        gpsMarker.openPopup();
+
+        // encontrar nearest (con lo que ya está cargado)
+        const nearest = nearestWaterBody(lng, lat);
+        if (!nearest){
+          setStatus("Listo","ok");
+          logLine("No se encontró un cuerpo hídrico cercano en los datos cargados. (Activa capas y recarga en el área).");
+          return;
+        }
+
+        const p = nearest.feature.properties || {};
+        const nombre = safe(p.nombre);
+        const area = fmtHa(p.area_ha);
+        const len  = fmtKm(p.length_km);
+
+        // marker al nearest (en el centro / bounds)
+        if (nearestMarker) map.removeLayer(nearestMarker);
+
+        let latlng = null;
+        if (nearest.layerRef.getLatLng) latlng = nearest.layerRef.getLatLng();
+        else if (nearest.layerRef.getBounds) latlng = nearest.layerRef.getBounds().getCenter();
+        else latlng = [lat, lng];
+
+        nearestMarker = L.marker(latlng).addTo(map);
+
+        const extra = area ? `<div><b>Área:</b> ${area}</div>` : (len ? `<div><b>Longitud:</b> ${len}</div>` : "");
+        nearestMarker.bindPopup(
+          `<b>Cuerpo hídrico más cercano</b><br>
+           <div><b>Tipo:</b> ${kindLabel(nearest.kind)}</div>
+           <div><b>Nombre:</b> ${escapeHtml(nombre)}</div>
+           ${extra}
+           <div><b>Distancia:</b> ${nearest.distKm.toFixed(2)} km</div>`
+        ).openPopup();
+
+        // zoom al feature
+        zoomToLayerRef(nearest.layerRef);
+
+        setStatus("Listo","ok");
+        logLine(`Cuerpo hídrico más cercano → ${nombre} (${kindLabel(nearest.kind)}) a ${nearest.distKm.toFixed(2)} km`);
+      }, (err)=>{
+        setStatus("Listo","ok");
+        logLine(`GPS: error (${err.code}) ${err.message}`);
+      }, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 5000
+      });
+    }
+
+    // =========================
+    // EVENTS
+    // =========================
+    els.btnReload.addEventListener("click", refresh);
+    els.btnGPS.addEventListener("click", gpsNearest);
+
+    ["chkProv","chkRioD","chkRioT","chkLagos","chkRep"].forEach(id=>{
+      document.getElementById(id).addEventListener("change", ()=>refresh());
+    });
+
+    map.on("moveend", ()=>debounceRefresh(350));
+
+    // Primera carga
+    logLine("Iniciando…");
+    refresh();
+  </script>
+</body>
+</html>
